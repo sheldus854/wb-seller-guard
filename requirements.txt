@@ -3,5 +3,4 @@ python-docx
 requests
 pandas
 openpyxl
-google-generativeaiы
-
+google-generativeai
