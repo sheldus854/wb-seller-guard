@@ -55,7 +55,7 @@ def get_ai_response(user_question):
 
     # Настройка модели
     try:
-        model = genai.GenerativeModel('gemini-2.0-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash')
         
         prompt = f"""
         Ты — SellerGuard, опытный юрист по защите прав селлеров Wildberries.
@@ -176,6 +176,7 @@ with tabs[2]:
                 st.success("Заявка принята! Юрист скоро напишет.")
             else:
                 st.error("Ошибка отправки.")
+
 
 
 
