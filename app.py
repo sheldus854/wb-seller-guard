@@ -158,6 +158,3 @@ with tabs[2]:
                 st.success("Заявка принята! Юрист скоро напишет.")
             else:
                 st.error("Ошибка отправки.")
-            if send_to_supabase(c, p, a):
-                st.success("Отправлено!")
-
