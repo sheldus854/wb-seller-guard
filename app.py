@@ -54,21 +54,21 @@ def get_ai_response(user_question):
         knowledge_base = "База знаний временно недоступна."
 
     # Настройка модели
-   model = genai.GenerativeModel('gemini-pro')
-    
-    prompt = f"""
-    Ты — SellerGuard, опытный юрист по защите прав селлеров Wildberries.
-    Твоя задача: давать краткие, четкие и юридически грамотные советы.
-    
-    ИСПОЛЬЗУЙ ЭТОТ КОНТЕКСТ (ЗАКОНЫ И ПРАКТИКА):
-    {knowledge_base}
-    
-    Вопрос пользователя: {user_question}
-    
-    Отвечай только по делу. В конце предложи сгенерировать претензию во вкладке "Генератор".
-    """
-
     try:
+        model = genai.GenerativeModel('gemini-pro')
+        
+        prompt = f"""
+        Ты — SellerGuard, опытный юрист по защите прав селлеров Wildberries.
+        Твоя задача: давать краткие, четкие и юридически грамотные советы.
+        
+        ИСПОЛЬЗУЙ ЭТОТ КОНТЕКСТ (ЗАКОНЫ И ПРАКТИКА):
+        {knowledge_base}
+        
+        Вопрос пользователя: {user_question}
+        
+        Отвечай только по делу. В конце предложи сгенерировать претензию во вкладке "Генератор".
+        """
+
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
@@ -158,4 +158,3 @@ with tabs[2]:
                 st.success("Заявка принята! Юрист скоро напишет.")
             else:
                 st.error("Ошибка отправки.")
-
