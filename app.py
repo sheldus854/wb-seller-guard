@@ -6,6 +6,7 @@ from io import BytesIO
 import datetime
 import requests
 import google.generativeai as genai
+import time
 
 # --- 1. НАСТРОЙКИ ---
 st.set_page_config(page_title="SellerGuard AI", page_icon="🛡️", layout="wide")
@@ -38,7 +39,7 @@ def fetch_leads():
     except:
         return pd.DataFrame()
 
-# --- 3. МОЗГИ (Google Gemini) ---
+# --- 3. МОЗГИ (СИСТЕМА-ВЕЗДЕХОД) ---
 def get_ai_response(user_question):
     try:
         api_key = st.secrets["gemini"]["api_key"]
@@ -53,26 +54,38 @@ def get_ai_response(user_question):
     except:
         knowledge_base = "База знаний временно недоступна."
 
-    # Настройка модели
-    try:
-        model = genai.GenerativeModel('gemini-2.0-flash-lite')
-        
-        prompt = f"""
-        Ты — SellerGuard, опытный юрист по защите прав селлеров Wildberries.
-        Твоя задача: давать краткие, четкие и юридически грамотные советы.
-        
-        ИСПОЛЬЗУЙ ЭТОТ КОНТЕКСТ (ЗАКОНЫ И ПРАКТИКА):
-        {knowledge_base}
-        
-        Вопрос пользователя: {user_question}
-        
-        Отвечай только по делу. В конце предложи сгенерировать претензию во вкладке "Генератор".
-        """
+    # СПИСОК МОДЕЛЕЙ (Пробуем по очереди)
+    # Сначала экспериментальные (они чаще свободны), потом обычные
+    models_to_try = [
+        'gemini-2.0-flash-exp-1',   # 1. Экспериментальная (обычно безлимит)
+        'gemini-exp-1206',          # 2. Еще одна экспериментальная
+        'gemini-2.0-flash-lite',    # 3. Легкая версия
+        'gemini-2.0-flash',         # 4. Стандартная
+        'gemini-1.5-flash'          # 5. Резерв
+    ]
 
-        response = model.generate_content(prompt)
-        return response.text
-    except Exception as e:
-        return f"Ошибка Gemini: {e}"
+    last_error = ""
+
+    prompt = f"""
+    Ты — SellerGuard, юрист по Wildberries.
+    Контекст: {knowledge_base}
+    Вопрос: {user_question}
+    Отвечай кратко и юридически точно.
+    """
+
+    # Цикл перебора
+    for model_name in models_to_try:
+        try:
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(prompt)
+            return response.text # Если сработало — возвращаем ответ и выходим
+        except Exception as e:
+            last_error = e
+            time.sleep(1) # Пауза 1 сек перед следующей попыткой
+            continue # Если ошибка — идем к следующей модели
+
+    # Если ничего не помогло
+    return f"⚠️ Все линии заняты. Ошибка: {last_error}"
 
 # --- 4. ДОКУМЕНТЫ ---
 def create_doc(seller, inn, act, money, problem):
@@ -92,37 +105,15 @@ def create_doc(seller, inn, act, money, problem):
     return b
 
 # --- 5. ИНТЕРФЕЙС ---
-
-# Сайдбар (Админка + ДИАГНОСТИКА)
 with st.sidebar:
     st.header("🔐 Владелец")
-    
-    # --- БЛОК ДИАГНОСТИКИ ---
-    st.divider()
-    st.write("🔍 **Проверка связи с Google:**")
-    try:
-        genai.configure(api_key=st.secrets["gemini"]["api_key"])
-        models = list(genai.list_models())
-        found = False
-        for m in models:
-            if "generateContent" in m.supported_generation_methods:
-                st.code(m.name) # Покажет точное название модели
-                found = True
-        if not found:
-            st.error("Список моделей пуст! Проблема с Ключом/Проектом.")
-    except Exception as e:
-        st.error(f"Ошибка доступа: {e}")
-    st.divider()
-    # ------------------------
-
     if st.text_input("Пароль", type="password") == st.secrets["admin"]["password"]:
         st.success("Доступ открыт")
         df = fetch_leads()
         if not df.empty:
             st.dataframe(df)
-            st.metric("Потенциал (15%)", f"{int(df['amount'].sum() * 0.15):,} ₽")
-        else:
-            st.info("Заявок пока нет")
+            st.metric("Потенциал", f"{int(df['amount'].sum() * 0.15):,} ₽")
+
 st.title("🛡️ SellerGuard AI")
 st.markdown("#### Твой личный юрист и защита от штрафов WB")
 
@@ -130,7 +121,7 @@ tabs = st.tabs(["💬 AI-Консультант", "📄 Генератор Пр�
 
 # Вкладка 1: ЧАТ
 with tabs[0]:
-    st.info("🤖 Я изучил судебную практику и Оферту WB. Задай мне вопрос!")
+    st.info("🤖 Я на связи! Использую умный поиск свободной модели.")
     
     if "messages" not in st.session_state:
         st.session_state.messages = []
@@ -139,13 +130,13 @@ with tabs[0]:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    if prompt := st.chat_input("Например: 'Можно ли оспорить штраф за габариты?'"):
+    if prompt := st.chat_input("Например: 'Можно ли оспорить штраф?'"):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
         with st.chat_message("assistant"):
-            with st.spinner("Анализирую законы..."):
+            with st.spinner("Подбираю свободного юриста (модель)..."):
                 reply = get_ai_response(prompt)
                 st.markdown(reply)
         st.session_state.messages.append({"role": "assistant", "content": reply})
@@ -166,19 +157,13 @@ with tabs[1]:
 
 # Вкладка 3: ЮРИСТ
 with tabs[2]:
-    st.write("Сложный случай? Оставь заявку — мы берем % только после победы.")
     with st.form("lead"):
-        c = st.text_input("Твой контакт (Telegram/WhatsApp)")
-        p = st.text_area("Кратко о проблеме")
-        a = st.number_input("Сумма спора", 100000)
-        if st.form_submit_button("Отправить заявку"):
-            if send_to_supabase(c, p, a):
-                st.success("Заявка принята! Юрист скоро напишет.")
-            else:
-                st.error("Ошибка отправки.")
-
-
-
+        c = st.text_input("Контакт")
+        p = st.text_area("Проблема")
+        a = st.number_input("Сумма", 100000)
+        if st.form_submit_button("Отправить"):
+            send_to_supabase(c, p, a)
+            st.success("Отправлено!")
 
 
 
