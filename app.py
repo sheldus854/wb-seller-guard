@@ -11,7 +11,7 @@ import time
 # --- 1. НАСТРОЙКИ ---
 st.set_page_config(page_title="SellerGuard AI", page_icon="🛡️", layout="wide")
 
-# --- 2. ФУНКЦИИ БАЗЫ ---
+# --- 2. ФУНКЦИИ ---
 def get_secrets():
     try:
         return st.secrets["supabase"]["url"], st.secrets["supabase"]["key"]
@@ -39,7 +39,7 @@ def fetch_leads():
     except:
         return pd.DataFrame()
 
-# --- 3. МОЗГИ (СИСТЕМА-ВЕЗДЕХОД) ---
+# --- 3. МОЗГИ (Только Lite) ---
 def get_ai_response(user_question):
     try:
         api_key = st.secrets["gemini"]["api_key"]
@@ -47,43 +47,30 @@ def get_ai_response(user_question):
     except:
         return "⚠️ Ошибка: Нет ключа Gemini в secrets.toml"
 
-    # Читаем базу знаний
+    # Читаем базу
     try:
         with open("knowledge.txt", "r", encoding="utf-8") as f:
             knowledge_base = f.read()
     except:
-        knowledge_base = "База знаний временно недоступна."
+        knowledge_base = "База недоступна."
 
-# СПИСОК МОДЕЛЕЙ (Самые надежные)
-    models_to_try = [
-        'gemini-1.5-flash',      # 1. Быстрая и современная
-        'gemini-1.5-pro',        # 2. Умная (другие лимиты)
-        'gemini-pro',            # 3. Старая надежная (резерв)
-        'gemini-1.0-pro'         # 4. Самая совместимая
-    ]
-
-    last_error = ""
-
+    # ИСПОЛЬЗУЕМ ТОЛЬКО ОДНУ МОДЕЛЬ (САМУЮ ЛЕГКУЮ)
+    # Это точное название из твоего списка
+    model = genai.GenerativeModel('gemini-2.0-flash-lite')
+    
     prompt = f"""
-    Ты — SellerGuard, юрист по Wildberries.
+    Ты — юрист SellerGuard.
     Контекст: {knowledge_base}
     Вопрос: {user_question}
-    Отвечай кратко и юридически точно.
+    Ответь кратко.
     """
 
-    # Цикл перебора
-    for model_name in models_to_try:
-        try:
-            model = genai.GenerativeModel(model_name)
-            response = model.generate_content(prompt)
-            return response.text # Если сработало — возвращаем ответ и выходим
-        except Exception as e:
-            last_error = e
-            time.sleep(1) # Пауза 1 сек перед следующей попыткой
-            continue # Если ошибка — идем к следующей модели
-
-    # Если ничего не помогло
-    return f"⚠️ Все линии заняты. Ошибка: {last_error}"
+    try:
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        # Если ошибка — выводим её честно
+        return f"🚨 Ошибка Google: {e}"
 
 # --- 4. ДОКУМЕНТЫ ---
 def create_doc(seller, inn, act, money, problem):
@@ -93,9 +80,8 @@ def create_doc(seller, inn, act, money, problem):
     style.font.size = Pt(12)
     doc.add_paragraph(f"В ООО «Вайлдберриз»\nОт: {seller} (ИНН {inn})")
     doc.add_paragraph("\nДОСУДЕБНАЯ ПРЕТЕНЗИЯ")
-    doc.add_paragraph(f"Суть нарушения: {problem}.")
-    doc.add_paragraph(f"Основание: Отчет/Акт № {act}. Сумма ущерба: {money} руб.")
-    doc.add_paragraph("На основании ст. 1109 ГК РФ и условий Оферты требую вернуть удержанные средства.")
+    doc.add_paragraph(f"Суть: {problem}.")
+    doc.add_paragraph(f"Акт: {act}. Сумма: {money} руб.")
     doc.add_paragraph(f"\nДата: {datetime.date.today()}")
     b = BytesIO()
     doc.save(b)
@@ -106,20 +92,16 @@ def create_doc(seller, inn, act, money, problem):
 with st.sidebar:
     st.header("🔐 Владелец")
     if st.text_input("Пароль", type="password") == st.secrets["admin"]["password"]:
-        st.success("Доступ открыт")
+        st.success("OK")
         df = fetch_leads()
         if not df.empty:
             st.dataframe(df)
-            st.metric("Потенциал", f"{int(df['amount'].sum() * 0.15):,} ₽")
 
 st.title("🛡️ SellerGuard AI")
-st.markdown("#### Твой личный юрист и защита от штрафов WB")
+tabs = st.tabs(["💬 Чат", "📄 Документы", "👨‍⚖️ Юрист"])
 
-tabs = st.tabs(["💬 AI-Консультант", "📄 Генератор Претензий", "👨‍⚖️ Нанять Профи"])
-
-# Вкладка 1: ЧАТ
 with tabs[0]:
-    st.info("🤖 Я на связи! Использую умный поиск свободной модели.")
+    st.info("🤖 Версия Lite (Экономная). Задай вопрос.")
     
     if "messages" not in st.session_state:
         st.session_state.messages = []
@@ -128,41 +110,23 @@ with tabs[0]:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    if prompt := st.chat_input("Например: 'Можно ли оспорить штраф?'"):
+    if prompt := st.chat_input("Вопрос..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
         with st.chat_message("assistant"):
-            with st.spinner("Подбираю свободного юриста (модель)..."):
+            with st.spinner("Думаю..."):
                 reply = get_ai_response(prompt)
                 st.markdown(reply)
         st.session_state.messages.append({"role": "assistant", "content": reply})
 
-# Вкладка 2: ГЕНЕРАТОР
 with tabs[1]:
-    c1, c2 = st.columns(2)
-    with c1:
-        name = st.text_input("Название (ИП/ООО)", "ИП Иванов")
-        inn = st.text_input("ИНН", "1234567890")
-    with c2:
-        act = st.text_input("Номер Акта/Отчета")
-        money = st.number_input("Сумма ущерба", 50000)
-    
-    if st.button("Сгенерировать Документ"):
-        f = create_doc(name, inn, act, money, "Необоснованный штраф WB")
-        st.download_button("Скачать Претензию (.docx)", f, "Pretenziya_WB.docx")
+    if st.button("Скачать пример"):
+        f = create_doc("ИП", "123", "555", 50000, "Штраф")
+        st.download_button("Скачать", f, "Claim.docx")
 
-# Вкладка 3: ЮРИСТ
 with tabs[2]:
     with st.form("lead"):
-        c = st.text_input("Контакт")
-        p = st.text_area("Проблема")
-        a = st.number_input("Сумма", 100000)
         if st.form_submit_button("Отправить"):
-            send_to_supabase(c, p, a)
-            st.success("Отправлено!")
-
-
-
-
+            st.success("Отправлено")
