@@ -93,9 +93,28 @@ def create_doc(seller, inn, act, money, problem):
 
 # --- 5. ИНТЕРФЕЙС ---
 
-# Сайдбар (Админка)
+# Сайдбар (Админка + ДИАГНОСТИКА)
 with st.sidebar:
     st.header("🔐 Владелец")
+    
+    # --- БЛОК ДИАГНОСТИКИ ---
+    st.divider()
+    st.write("🔍 **Проверка связи с Google:**")
+    try:
+        genai.configure(api_key=st.secrets["gemini"]["api_key"])
+        models = list(genai.list_models())
+        found = False
+        for m in models:
+            if "generateContent" in m.supported_generation_methods:
+                st.code(m.name) # Покажет точное название модели
+                found = True
+        if not found:
+            st.error("Список моделей пуст! Проблема с Ключом/Проектом.")
+    except Exception as e:
+        st.error(f"Ошибка доступа: {e}")
+    st.divider()
+    # ------------------------
+
     if st.text_input("Пароль", type="password") == st.secrets["admin"]["password"]:
         st.success("Доступ открыт")
         df = fetch_leads()
@@ -104,7 +123,6 @@ with st.sidebar:
             st.metric("Потенциал (15%)", f"{int(df['amount'].sum() * 0.15):,} ₽")
         else:
             st.info("Заявок пока нет")
-
 st.title("🛡️ SellerGuard AI")
 st.markdown("#### Твой личный юрист и защита от штрафов WB")
 
@@ -158,4 +176,5 @@ with tabs[2]:
                 st.success("Заявка принята! Юрист скоро напишет.")
             else:
                 st.error("Ошибка отправки.")
+
 
