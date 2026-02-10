@@ -54,7 +54,7 @@ def get_ai_response(user_question):
         knowledge_base = "База знаний временно недоступна."
 
     # Настройка модели
-    model = genai.GenerativeModel('gemini-1.5-flash')
+   model = genai.GenerativeModel('gemini-pro')
     
     prompt = f"""
     Ты — SellerGuard, опытный юрист по защите прав селлеров Wildberries.
@@ -158,3 +158,4 @@ with tabs[2]:
                 st.success("Заявка принята! Юрист скоро напишет.")
             else:
                 st.error("Ошибка отправки.")
+
