@@ -3,4 +3,4 @@ python-docx
 requests
 pandas
 openpyxl
-google-generativeai
+google-generativeai>=0.7.0
