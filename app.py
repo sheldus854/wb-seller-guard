@@ -58,7 +58,8 @@ def get_ai_response(user_question):
     try:
         completion = client.chat.completions.create(
             # ВСТАВИЛИ РАБОЧУЮ МОДЕЛЬ ПРЯМО СЮДА:
-            model="google/gemini-2.0-flash-exp:free", 
+            # Самая стабильная бесплатная модель на сегодня (DeepSeek)
+            model="deepseek/deepseek-r1:free",
             messages=[
                 {
                     "role": "system",
@@ -124,6 +125,7 @@ with tabs[2]:
     with st.form("lead"):
         c, p, a = st.text_input("Контакты"), st.text_area("Проблема"), st.number_input("Сумма")
         if st.form_submit_button("Отправить"): send_to_supabase(c, p, a)
+
 
 
 
