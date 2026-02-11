@@ -5,12 +5,12 @@ from docx.shared import Pt
 from io import BytesIO
 import datetime
 import requests
-import google.generativeai as genai
+from openai import OpenAI
 
 # --- 1. НАСТРОЙКИ ---
 st.set_page_config(page_title="SellerGuard AI", page_icon="🛡️", layout="wide")
 
-# --- 2. ФУНКЦИИ БАЗЫ (Supabase) ---
+# --- 2. ФУНКЦИИ ---
 def get_secrets():
     try:
         return st.secrets["supabase"]["url"], st.secrets["supabase"]["key"]
@@ -38,77 +38,57 @@ def fetch_leads():
     except:
         return pd.DataFrame()
 
-# --- 3. МОЗГИ (Gemini) ---
+# --- 3. МОЗГИ (УНИВЕРСАЛЬНЫЕ) ---
 def get_ai_response(user_question):
     try:
-        api_key = st.secrets["gemini"]["api_key"]
-        genai.configure(api_key=api_key)
-    except:
-        return "⚠️ Ошибка: Нет ключа Gemini в secrets.toml"
+        key = st.secrets["ai_service"]["api_key"]
+        
+        # Определяем сервис по началу ключа
+        if key.startswith("gsk_"):
+            # Это GROQ (Супер быстрый)
+            base_url = "https://api.groq.com/openai/v1"
+            model = "llama3-70b-8192" # Очень умная бесплатная модель
+            system_name = "Groq Llama 3"
+        else:
+            # Это OPENROUTER (Доступ к Google)
+            base_url = "https://openrouter.ai/api/v1"
+            model = "google/gemini-2.0-flash-lite-preview-02-05:free"
+            system_name = "OpenRouter Gemini"
 
-    # Читаем базу знаний
+        client = OpenAI(base_url=base_url, api_key=key)
+        
+    except:
+        return "⚠️ Ошибка: Проверь ключ в secrets.toml"
+
     try:
         with open("knowledge.txt", "r", encoding="utf-8") as f:
             knowledge_base = f.read()
     except:
-        knowledge_base = "База знаний временно недоступна."
+        knowledge_base = "База знаний недоступна."
 
-    # ИСПОЛЬЗУЕМ 1.5 FLASH (Самая стабильная и дешевая по лимитам)
-    # Если 1.5 не работает, можно заменить на 'gemini-2.0-flash'
     try:
-        # Используем модель, которая ЕСТЬ в твоем списке
-        model = genai.GenerativeModel('gemini-2.0-flash-lite')
-        
-        prompt = f"""
-        Ты — SellerGuard, профессиональный юрист по защите прав селлеров Wildberries.
-        Твоя цель: защитить деньги селлера.
-        
-        БАЗА ЗНАНИЙ И ЗАКОНЫ:
-        {knowledge_base}
-        
-        Вопрос клиента: {user_question}
-        
-        Дай четкий, юридически обоснованный ответ. Обязательно ссылайся на статьи ГК РФ или пункты Оферты, если они есть в базе.
-        """
-
-        response = model.generate_content(prompt)
-        return response.text
+        completion = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": f"Ты юрист по Wildberries. Контекст: {knowledge_base}. Отвечай кратко."},
+                {"role": "user", "content": user_question}
+            ]
+        )
+        return completion.choices[0].message.content
     except Exception as e:
-        return f"🚨 Ошибка Google API: {e}. (Попробуй обновить ключ)"
+        return f"Ошибка ({system_name}): {e}"
 
-# --- 4. ГЕНЕРАТОР ДОКУМЕНТОВ ---
+# --- 4. ДОКУМЕНТЫ ---
 def create_doc(seller, inn, act, money, problem):
     doc = Document()
     style = doc.styles['Normal']
     style.font.name = 'Times New Roman'
     style.font.size = Pt(12)
-    
-    # Шапка
-    doc.add_paragraph(f"В ООО «Вайлдберриз» (ОГРН 1067746062449)")
-    doc.add_paragraph(f"От: {seller} (ИНН {inn})")
-    doc.add_paragraph(f"Дата: {datetime.date.today()}\n")
-    
-    # Заголовок
-    p = doc.add_paragraph("ДОСУДЕБНАЯ ПРЕТЕНЗИЯ")
-    p.alignment = 1 # По центру
-    
-    # Тело
-    doc.add_paragraph(f"\nМною был получен Отчет о реализации/Удержаниях № {act}.")
-    doc.add_paragraph(f"В данном отчете было произведено необоснованное удержание на сумму {money} руб.")
-    doc.add_paragraph(f"Суть нарушения: {problem}.")
-    
-    doc.add_paragraph("\nОбоснование:")
-    doc.add_paragraph("1. Согласно ст. 1102 ГК РФ, лицо, которое без установленных законом оснований приобрело имущество за счет другого лица, обязано возвратить неосновательное обогащение.")
-    doc.add_paragraph("2. Wildberries не предоставил доказательств нарушения (фото/видео/акты), подтверждающих правомерность штрафа.")
-    
-    doc.add_paragraph("\nПРОШУ:")
-    doc.add_paragraph(f"1. Отменить удержание по отчету № {act}.")
-    doc.add_paragraph(f"2. Вернуть на баланс денежные средства в размере {money} руб. в течение 10 календарных дней.")
-    
-    doc.add_paragraph("\nВ случае отказа я буду вынужден обратиться в Арбитражный суд с возложением на вас судебных расходов.")
-    
-    doc.add_paragraph(f"\n_______________ / {seller}")
-    
+    doc.add_paragraph(f"В ООО «Вайлдберриз»\nОт: {seller} (ИНН {inn})")
+    doc.add_paragraph("\nДОСУДЕБНАЯ ПРЕТЕНЗИЯ")
+    doc.add_paragraph(f"Суть: {problem}.")
+    doc.add_paragraph(f"Акт: {act}. Сумма: {money} руб.")
+    doc.add_paragraph(f"\nДата: {datetime.date.today()}")
     b = BytesIO()
     doc.save(b)
     b.seek(0)
@@ -118,88 +98,34 @@ def create_doc(seller, inn, act, money, problem):
 with st.sidebar:
     st.header("🔐 Владелец")
     if st.text_input("Пароль", type="password") == st.secrets["admin"]["password"]:
-        st.success("Доступ открыт")
+        st.success("Вход выполнен")
         df = fetch_leads()
-        if not df.empty:
-            st.write("Заявки на юриста:")
-            st.dataframe(df)
-            st.metric("Потенциал выручки (15%)", f"{int(df['amount'].sum() * 0.15):,} ₽")
-        else:
-            st.info("Заявок пока нет")
+        if not df.empty: st.dataframe(df)
 
 st.title("🛡️ SellerGuard AI")
-st.markdown("#### Твой личный юрист и защита от штрафов WB")
+tabs = st.tabs(["💬 Чат", "📄 Документы", "👨‍⚖️ Юрист"])
 
-tabs = st.tabs(["💬 AI-Консультант", "📄 Генератор Претензий", "👨‍⚖️ Нанять Юриста"])
-
-# Вкладка 1: ЧАТ
 with tabs[0]:
-    st.info("🤖 Я изучил базу выигранных дел. Спроси меня про штрафы или блокировки.")
-    
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-
+    st.info("🤖 Система активна. Задайте вопрос.")
+    if "messages" not in st.session_state: st.session_state.messages = []
     for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+        with st.chat_message(msg["role"]): st.markdown(msg["content"])
 
-    if prompt := st.chat_input("Например: 'ВБ потерял товар, как вернуть деньги?'"):
+    if prompt := st.chat_input("Ваш вопрос..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-
+        with st.chat_message("user"): st.markdown(prompt)
         with st.chat_message("assistant"):
-            with st.spinner("Анализирую судебную практику..."):
+            with st.spinner("Анализирую..."):
                 reply = get_ai_response(prompt)
                 st.markdown(reply)
         st.session_state.messages.append({"role": "assistant", "content": reply})
 
-# Вкладка 2: ГЕНЕРАТОР (ВЕРНУЛСЯ!)
 with tabs[1]:
-    st.write("### 📝 Создание документа за 1 минуту")
-    st.write("Заполни форму, и я сформирую юридически грамотную претензию.")
-    
-    c1, c2 = st.columns(2)
-    with c1:
-        name = st.text_input("Ваше название (ИП/ООО)", "ИП Иванов И.И.")
-        inn = st.text_input("Ваш ИНН", "500100200300")
-    with c2:
-        act = st.text_input("Номер Отчета/Штрафа", "№ 12345678")
-        money = st.number_input("Сумма ущерба (руб)", 50000, step=1000)
-    
-    problem = st.text_area("Описание проблемы (кратко)", "ВБ удержал штраф за габариты, но замеры не предоставил. Товар соответствует карточке.")
-    
-    if st.button("Сгенерировать Претензию"):
-        if name and inn and act:
-            file_doc = create_doc(name, inn, act, money, problem)
-            st.success("Документ готов!")
-            st.download_button(
-                label="📥 Скачать Претензию (.docx)",
-                data=file_doc,
-                file_name=f"Pretenziya_{act}.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            )
-        else:
-            st.error("Пожалуйста, заполните ИНН и номер отчета.")
+    if st.button("Скачать пример"):
+        f = create_doc("ИП", "000", "111", 5000, "Тест")
+        st.download_button("Скачать", f, "Claim.docx")
 
-# Вкладка 3: ФОРМА ЛИДОВ (ВЕРНУЛАСЬ!)
 with tabs[2]:
-    st.write("### 🤝 Сложный случай? Передадим дело профи.")
-    st.write("Наши юристы работают за % от выигранной суммы. Оплата только после победы.")
-    
-    with st.form("lead_form"):
-        contact = st.text_input("Ваш контакт (Telegram/WhatsApp)", placeholder="@username или +7...")
-        problem_desc = st.text_area("Суть проблемы", placeholder="Штраф 200к, заблокировали кабинет...")
-        amount_lost = st.number_input("Сумма спора", min_value=10000, value=100000)
-        
-        submitted = st.form_submit_button("🚀 Отправить заявку юристу")
-        if submitted:
-            if contact and problem_desc:
-                # Отправка в Supabase
-                if send_to_supabase(contact, problem_desc, amount_lost):
-                    st.success("Заявка принята! Юрист свяжется с вами в течение часа.")
-                else:
-                    st.error("Ошибка соединения. Напишите нам напрямую в поддержку.")
-            else:
-                st.warning("Заполните контакт, чтобы мы могли связаться.")
-
+    with st.form("lead"):
+        c, p, a = st.text_input("Контакты"), st.text_area("Проблема"), st.number_input("Сумма")
+        if st.form_submit_button("Отправить"): send_to_supabase(c, p, a)
