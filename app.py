@@ -38,16 +38,15 @@ def fetch_leads():
     except:
         return pd.DataFrame()
 
-# --- 3. МОЗГИ (OpenRouter FIX) ---
+# --- 3. МОЗГИ (СИСТЕМА "ТАНК" - ПЕРЕБОР МОДЕЛЕЙ) ---
 def get_ai_response(user_question):
     try:
-        # Подключаемся к OpenRouter
         client = OpenAI(
             base_url="https://openrouter.ai/api/v1",
-            api_key=st.secrets["ai_service"]["api_key"], # Убедись, что в secrets.toml ключ лежит тут
+            api_key=st.secrets["ai_service"]["api_key"],
         )
     except:
-        return "⚠️ Ошибка: Проверь ключ OpenRouter в secrets."
+        return "⚠️ Ошибка: Проверь ключ в secrets."
 
     try:
         with open("knowledge.txt", "r", encoding="utf-8") as f:
@@ -55,25 +54,38 @@ def get_ai_response(user_question):
     except:
         knowledge_base = "База знаний временно недоступна."
 
-    try:
-        completion = client.chat.completions.create(
-            # ВСТАВИЛИ РАБОЧУЮ МОДЕЛЬ ПРЯМО СЮДА:
-            # Самая стабильная бесплатная модель на сегодня (DeepSeek)
-            model="deepseek/deepseek-r1:free",
-            messages=[
-                {
-                    "role": "system",
-                    "content": f"Ты юрист SellerGuard. Контекст: {knowledge_base}. Отвечай кратко и по делу."
-                },
-                {
-                    "role": "user",
-                    "content": user_question
-                }
-            ]
-        )
-        return completion.choices[0].message.content
-    except Exception as e:
-        return f"Ошибка AI: {e}"
+    # СПИСОК БЕСПЛАТНЫХ МОДЕЛЕЙ (Если одна сломалась, пробуем следующую)
+    models_to_try = [
+        "google/gemini-2.0-pro-exp-02-05:free",        # 1. Самая новая Google
+        "google/gemini-2.0-flash-lite-preview-02-05:free", # 2. Легкая Google
+        "deepseek/deepseek-r1-distill-llama-70b:free", # 3. DeepSeek (стабильный)
+        "meta-llama/llama-3.3-70b-instruct:free",      # 4. Llama (Facebook)
+        "mistralai/mistral-small-24b-instruct-2501:free" # 5. Mistral (Европа)
+    ]
+
+    last_error = ""
+
+    # Цикл перебора: стучимся во все двери
+    for model_name in models_to_try:
+        try:
+            completion = client.chat.completions.create(
+                model=model_name,
+                messages=[
+                    {"role": "system", "content": f"Ты юрист по Wildberries. Контекст: {knowledge_base}. Отвечай кратко."},
+                    {"role": "user", "content": user_question}
+                ]
+            )
+            # Если успех — возвращаем ответ и добавляем подпись, какая модель сработала
+            return completion.choices[0].message.content + f"\n\n_(Ответил: {model_name.split('/')[1]})_"
+        
+        except Exception as e:
+            # Если ошибка — запоминаем и идем дальше
+            last_error = e
+            continue 
+
+    # Если вообще все 5 моделей лежат (редкость)
+    return f"⚠️ Все линии заняты. Последняя ошибка: {last_error}"
+    
 # --- 4. ДОКУМЕНТЫ ---
 def create_doc(seller, inn, act, money, problem):
     doc = Document()
@@ -125,6 +137,7 @@ with tabs[2]:
     with st.form("lead"):
         c, p, a = st.text_input("Контакты"), st.text_area("Проблема"), st.number_input("Сумма")
         if st.form_submit_button("Отправить"): send_to_supabase(c, p, a)
+
 
 
 
