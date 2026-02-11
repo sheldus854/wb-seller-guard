@@ -38,47 +38,41 @@ def fetch_leads():
     except:
         return pd.DataFrame()
 
-# --- 3. МОЗГИ (УНИВЕРСАЛЬНЫЕ) ---
+# --- 3. МОЗГИ (OpenRouter FIX) ---
 def get_ai_response(user_question):
     try:
-        key = st.secrets["ai_service"]["api_key"]
-        
-        # Определяем сервис по началу ключа
-        if key.startswith("gsk_"):
-            # Это GROQ (Супер быстрый)
-            base_url = "https://api.groq.com/openai/v1"
-            model = "llama3-70b-8192" # Очень умная бесплатная модель
-            system_name = "Groq Llama 3"
-        else:
-            # Это OPENROUTER (Доступ к Google)
-            base_url = "https://openrouter.ai/api/v1"
-            # Самая надежная бесплатная модель (без лишних цифр)
-            model="deepseek/deepseek-r1:free",
-            system_name = "OpenRouter Gemini"
-
-        client = OpenAI(base_url=base_url, api_key=key)
-        
+        # Подключаемся к OpenRouter
+        client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=st.secrets["ai_service"]["api_key"], # Убедись, что в secrets.toml ключ лежит тут
+        )
     except:
-        return "⚠️ Ошибка: Проверь ключ в secrets.toml"
+        return "⚠️ Ошибка: Проверь ключ OpenRouter в secrets."
 
     try:
         with open("knowledge.txt", "r", encoding="utf-8") as f:
             knowledge_base = f.read()
     except:
-        knowledge_base = "База знаний недоступна."
+        knowledge_base = "База знаний временно недоступна."
 
     try:
         completion = client.chat.completions.create(
-            model=model,
+            # ВСТАВИЛИ РАБОЧУЮ МОДЕЛЬ ПРЯМО СЮДА:
+            model="google/gemini-2.0-flash-exp:free", 
             messages=[
-                {"role": "system", "content": f"Ты юрист по Wildberries. Контекст: {knowledge_base}. Отвечай кратко."},
-                {"role": "user", "content": user_question}
+                {
+                    "role": "system",
+                    "content": f"Ты юрист SellerGuard. Контекст: {knowledge_base}. Отвечай кратко и по делу."
+                },
+                {
+                    "role": "user",
+                    "content": user_question
+                }
             ]
         )
         return completion.choices[0].message.content
     except Exception as e:
-        return f"Ошибка ({system_name}): {e}"
-
+        return f"Ошибка AI: {e}"
 # --- 4. ДОКУМЕНТЫ ---
 def create_doc(seller, inn, act, money, problem):
     doc = Document()
@@ -130,5 +124,6 @@ with tabs[2]:
     with st.form("lead"):
         c, p, a = st.text_input("Контакты"), st.text_area("Проблема"), st.number_input("Сумма")
         if st.form_submit_button("Отправить"): send_to_supabase(c, p, a)
+
 
 
