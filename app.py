@@ -54,13 +54,13 @@ def get_ai_response(user_question):
     except:
         knowledge_base = "База знаний временно недоступна."
 
-    # СПИСОК БЕСПЛАТНЫХ МОДЕЛЕЙ (Если одна сломалась, пробуем следующую)
+  # СПИСОК БЕСПЛАТНЫХ МОДЕЛЕЙ (Самые надежные общие названия)
     models_to_try = [
-        "google/gemini-2.0-pro-exp-02-05:free",        # 1. Самая новая Google
-        "google/gemini-2.0-flash-lite-preview-02-05:free", # 2. Легкая Google
-        "deepseek/deepseek-r1-distill-llama-70b:free", # 3. DeepSeek (стабильный)
-        "meta-llama/llama-3.3-70b-instruct:free",      # 4. Llama (Facebook)
-        "mistralai/mistral-small-24b-instruct-2501:free" # 5. Mistral (Европа)
+        "google/gemini-2.0-flash-exp:free",  # 1. Гугл (экспериментальная, обновляется сама)
+        "deepseek/deepseek-r1:free",         # 2. DeepSeek (самая умная сейчас)
+        "meta-llama/llama-3.3-70b-instruct:free", # 3. Llama (от Facebook)
+        "qwen/qwen-2.5-vl-72b-instruct:free", # 4. Qwen (очень мощная модель)
+        "microsoft/phi-3-medium-128k-instruct:free" # 5. Резерв от Microsoft
     ]
 
     last_error = ""
@@ -137,6 +137,7 @@ with tabs[2]:
     with st.form("lead"):
         c, p, a = st.text_input("Контакты"), st.text_area("Проблема"), st.number_input("Сумма")
         if st.form_submit_button("Отправить"): send_to_supabase(c, p, a)
+
 
 
 
