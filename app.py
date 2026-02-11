@@ -53,7 +53,7 @@ def get_ai_response(user_question):
             # Это OPENROUTER (Доступ к Google)
             base_url = "https://openrouter.ai/api/v1"
             # Самая надежная бесплатная модель (без лишних цифр)
-            model="google/gemini-2.0-flash-exp:free",
+            model="deepseek/deepseek-r1:free",
             system_name = "OpenRouter Gemini"
 
         client = OpenAI(base_url=base_url, api_key=key)
@@ -130,4 +130,5 @@ with tabs[2]:
     with st.form("lead"):
         c, p, a = st.text_input("Контакты"), st.text_area("Проблема"), st.number_input("Сумма")
         if st.form_submit_button("Отправить"): send_to_supabase(c, p, a)
+
 
