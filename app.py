@@ -56,7 +56,8 @@ def get_ai_response(user_question):
     # ИСПОЛЬЗУЕМ 1.5 FLASH (Самая стабильная и дешевая по лимитам)
     # Если 1.5 не работает, можно заменить на 'gemini-2.0-flash'
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # Используем модель, которая ЕСТЬ в твоем списке
+        model = genai.GenerativeModel('gemini-2.0-flash-lite')
         
         prompt = f"""
         Ты — SellerGuard, профессиональный юрист по защите прав селлеров Wildberries.
@@ -201,3 +202,4 @@ with tabs[2]:
                     st.error("Ошибка соединения. Напишите нам напрямую в поддержку.")
             else:
                 st.warning("Заполните контакт, чтобы мы могли связаться.")
+
